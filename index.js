@@ -19,7 +19,14 @@ const app = new App({
       path: "/health",
       method: ["GET"],
       handler: (req, res) => {
-        res.send("OK");
+        try {
+          res.writeHead(200);
+          res.end("OK");
+        } catch (error) {
+          console.error("Health check error:", error);
+          res.writeHead(500);
+          res.end("Error");
+        }
       },
     },
   ],
@@ -254,7 +261,13 @@ app.message(
     const keepAlive = async () => {
       try {
         const response = await axios.get(
-          `http://localhost:${process.env.PORT || 3000}/health`
+          `http://localhost:${process.env.PORT || 3000}/health`,
+          {
+            timeout: 5000,
+            validateStatus: function (status) {
+              return status >= 200 && status < 500;
+            },
+          }
         );
         console.log(
           "Keep-alive ping sent:",
