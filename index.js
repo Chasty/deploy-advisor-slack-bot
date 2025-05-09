@@ -472,6 +472,11 @@ app.message(
                 /(?:should|can|could)\s+(?:i|we|you)\s+(?:deploy|release|push|ship)\s+(?:on|this\s+friday)(?:\?)?/i
               );
 
+            console.log("Message details:", {
+              parentMessage,
+              messages: result.messages,
+            });
+
             if (!isFridayDeploymentThread) {
               console.log(
                 "Not a Friday deployment thread - skipping Gemini response"
