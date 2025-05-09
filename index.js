@@ -1,7 +1,19 @@
 // Import required packages
 const { App } = require("@slack/bolt");
 const axios = require("axios");
+const http = require("http");
 require("dotenv").config();
+
+// Create a simple HTTP server for health checks
+const server = http.createServer((req, res) => {
+  if (req.url === "/health") {
+    res.writeHead(200);
+    res.end("OK");
+  } else {
+    res.writeHead(404);
+    res.end("Not Found");
+  }
+});
 
 // Initialize your Slack app
 const app = new App({
@@ -211,13 +223,56 @@ app.message(
 
 // Start the app
 (async () => {
-  await app.start(process.env.PORT || 3000);
-  console.log("⚡️ Slack bot is running!");
-  console.log('Listening for "should I deploy today" messages...');
+  try {
+    // Start the HTTP server first
+    const port = process.env.PORT || 3000;
+    server.listen(port, () => {
+      console.log(`Health check server is running on port ${port}`);
+    });
 
-  // Add a general message listener to debug all incoming messages
-  app.message(async ({ message, say }) => {
-    console.log("Received message:", message.text);
-    // Don't respond here, just log
-  });
+    // Then start the Slack app
+    await app.start();
+    console.log("⚡️ Slack bot is running!");
+    console.log('Listening for "should I deploy today" messages...');
+
+    // Add a general message listener to debug all incoming messages
+    app.message(async ({ message, say }) => {
+      console.log("Received message:", message.text);
+      // Don't respond here, just log
+    });
+
+    // Handle process termination
+    process.on("SIGTERM", async () => {
+      console.log("SIGTERM received. Shutting down gracefully...");
+      server.close();
+      await app.stop();
+      process.exit(0);
+    });
+
+    process.on("SIGINT", async () => {
+      console.log("SIGINT received. Shutting down gracefully...");
+      server.close();
+      await app.stop();
+      process.exit(0);
+    });
+
+    // Handle uncaught exceptions
+    process.on("uncaughtException", async (error) => {
+      console.error("Uncaught Exception:", error);
+      server.close();
+      await app.stop();
+      process.exit(1);
+    });
+
+    // Handle unhandled promise rejections
+    process.on("unhandledRejection", async (reason, promise) => {
+      console.error("Unhandled Rejection at:", promise, "reason:", reason);
+      server.close();
+      await app.stop();
+      process.exit(1);
+    });
+  } catch (error) {
+    console.error("Error starting the app:", error);
+    process.exit(1);
+  }
 })();
