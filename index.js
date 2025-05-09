@@ -1,26 +1,41 @@
 // Import required packages
 const { App } = require("@slack/bolt");
 const axios = require("axios");
-const http = require("http");
+const express = require("express");
 require("dotenv").config();
 
-// Create a simple HTTP server for health checks
-const server = http.createServer((req, res) => {
-  if (req.url === "/health") {
-    res.writeHead(200);
-    res.end("OK");
-  } else {
-    res.writeHead(404);
-    res.end("Not Found");
-  }
-});
+// Create Express app
+const expressApp = express();
+expressApp.use(express.json());
 
 // Initialize your Slack app
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   signingSecret: process.env.SLACK_SIGNING_SECRET,
-  socketMode: true, // Enable socket mode if you're using Slack's Socket Mode
-  appToken: process.env.SLACK_APP_TOKEN,
+  socketMode: false, // Disable socket mode
+  port: process.env.PORT || 3000,
+  customRoutes: [
+    {
+      path: "/health",
+      method: ["GET"],
+      handler: (req, res) => {
+        res.send("OK");
+      },
+    },
+  ],
+});
+
+// Add error handler for the Slack app
+app.error(async (error) => {
+  console.error("Slack app error:", error);
+  // Attempt to reconnect
+  try {
+    await app.stop();
+    await app.start();
+    console.log("Successfully reconnected to Slack");
+  } catch (reconnectError) {
+    console.error("Failed to reconnect:", reconnectError);
+  }
 });
 
 // Friday deployment messages with meme-style responses and emojis
@@ -224,13 +239,7 @@ app.message(
 // Start the app
 (async () => {
   try {
-    // Start the HTTP server first
-    const port = process.env.PORT || 3000;
-    server.listen(port, () => {
-      console.log(`Health check server is running on port ${port}`);
-    });
-
-    // Then start the Slack app
+    // Start the Slack app
     await app.start();
     console.log("⚡️ Slack bot is running!");
     console.log('Listening for "should I deploy today" messages...');
@@ -244,7 +253,9 @@ app.message(
     // Keep-alive mechanism
     const keepAlive = async () => {
       try {
-        const response = await axios.get(`http://localhost:${port}/health`);
+        const response = await axios.get(
+          `http://localhost:${process.env.PORT || 3000}/health`
+        );
         console.log(
           "Keep-alive ping sent:",
           response.status === 200 ? "OK" : "Failed"
@@ -254,22 +265,20 @@ app.message(
       }
     };
 
-    // Send keep-alive ping every 14 minutes
-    setInterval(keepAlive, 14 * 60 * 1000);
+    // Send keep-alive ping every 5 minutes
+    setInterval(keepAlive, 5 * 60 * 1000);
     // Send initial ping
     keepAlive();
 
     // Handle process termination
     process.on("SIGTERM", async () => {
       console.log("SIGTERM received. Shutting down gracefully...");
-      server.close();
       await app.stop();
       process.exit(0);
     });
 
     process.on("SIGINT", async () => {
       console.log("SIGINT received. Shutting down gracefully...");
-      server.close();
       await app.stop();
       process.exit(0);
     });
@@ -277,7 +286,6 @@ app.message(
     // Handle uncaught exceptions
     process.on("uncaughtException", async (error) => {
       console.error("Uncaught Exception:", error);
-      server.close();
       await app.stop();
       process.exit(1);
     });
@@ -285,7 +293,6 @@ app.message(
     // Handle unhandled promise rejections
     process.on("unhandledRejection", async (reason, promise) => {
       console.error("Unhandled Rejection at:", promise, "reason:", reason);
-      server.close();
       await app.stop();
       process.exit(1);
     });
