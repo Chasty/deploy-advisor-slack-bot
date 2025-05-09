@@ -469,18 +469,19 @@ app.message(
             const isFridayDeploymentThread =
               parentMessage &&
               parentMessage.text.match(
-                /(?:should|can|could)\s+(?:i|we|you)\s+(?:deploy|release|push|ship)\s+(?:on|this\s+friday)(?:\?)?/i
+                /(?:should|can|could)\s+(?:i|we|you)\s+(?:deploy|release|push|ship)\s+(?:today|now|this\s+time)(?:\?)?/i
               );
 
-            console.log("Message details:", {
-              parentMessage,
-              messages: result.messages,
+            console.log("Thread check:", {
+              parentMessageText: parentMessage?.text,
+              isFridayDeploymentThread,
+              regexMatch: parentMessage?.text.match(
+                /(?:should|can|could)\s+(?:i|we|you)\s+(?:deploy|release|push|ship)\s+(?:today|now|this\s+time)(?:\?)?/i
+              ),
             });
 
             if (!isFridayDeploymentThread) {
-              console.log(
-                "Not a Friday deployment thread - skipping Gemini response"
-              );
+              console.log("Not a deployment thread - skipping Gemini response");
               return;
             }
           } catch (error) {
