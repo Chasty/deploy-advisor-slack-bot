@@ -10,6 +10,10 @@ const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
 });
 
+// Rate limiting configuration
+const RATE_LIMIT_DELAY = 1000; // 1 second between requests
+let lastRequestTime = 0;
+
 // Create Express app
 const expressApp = express();
 expressApp.use(express.json());
@@ -217,9 +221,20 @@ app.message(
   }
 );
 
-// Function to get Gemini's response
-async function getGeminiResponse(message) {
+// Function to delay execution
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Function to get Gemini's response with retry logic
+async function getGeminiResponse(message, retryCount = 0) {
   try {
+    // Rate limiting
+    const now = Date.now();
+    const timeSinceLastRequest = now - lastRequestTime;
+    if (timeSinceLastRequest < RATE_LIMIT_DELAY) {
+      await delay(RATE_LIMIT_DELAY - timeSinceLastRequest);
+    }
+    lastRequestTime = Date.now();
+
     const config = {
       responseMimeType: "text/plain",
     };
@@ -251,7 +266,24 @@ async function getGeminiResponse(message) {
     return fullResponse;
   } catch (error) {
     console.error("Error getting Gemini response:", error);
-    return "I'm having trouble thinking right now. Maybe try asking again? 🤔";
+
+    // Retry logic for rate limiting
+    if (error.message.includes("429") && retryCount < 3) {
+      console.log(
+        `Rate limited, retrying in ${(retryCount + 1) * 2} seconds...`
+      );
+      await delay((retryCount + 1) * 2000); // Exponential backoff
+      return getGeminiResponse(message, retryCount + 1);
+    }
+
+    // If we've exhausted retries or it's a different error, return a fallback response
+    return (
+      "I'm a bit busy right now, but here's what I know about deployments:\n" +
+      "1. Avoid Friday deployments 🚫\n" +
+      "2. Always have a rollback plan 🔄\n" +
+      "3. Test thoroughly before deploying ✅\n" +
+      "Try asking again in a moment! 🤖"
+    );
   }
 }
 
@@ -351,7 +383,9 @@ app.message(
           }
         } else {
           // Use Gemini for other questions
+          console.log("Calling Gemini API for message:", message.text);
           const geminiResponse = await getGeminiResponse(message.text);
+          console.log("Received Gemini response:", geminiResponse);
           await say({
             text: geminiResponse,
             thread_ts: message.ts,
