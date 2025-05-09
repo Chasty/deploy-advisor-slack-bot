@@ -16,6 +16,32 @@ const app = new App({
   port: process.env.PORT || 3000,
   customRoutes: [
     {
+      path: "/",
+      method: ["GET", "HEAD"],
+      handler: (req, res) => {
+        res.writeHead(200);
+        res.end("Slack Deploy Advisor Bot is running!");
+      },
+    },
+    {
+      path: "/slack/events",
+      method: ["POST"],
+      handler: (req, res) => {
+        // Handle the Slack Events API challenge
+        if (req.body && req.body.challenge) {
+          console.log("Received Slack challenge request");
+          res.writeHead(200, { "Content-Type": "text/plain" });
+          res.end(req.body.challenge);
+          return;
+        }
+
+        // Handle other events
+        console.log("Received Slack event:", req.body);
+        res.writeHead(200);
+        res.end("OK");
+      },
+    },
+    {
       path: "/health",
       method: ["GET"],
       handler: (req, res) => {
@@ -254,7 +280,12 @@ app.message(
     // Add a general message listener to debug all incoming messages
     app.message(async ({ message, say }) => {
       console.log("Received message:", message.text);
-      // Don't respond here, just log
+      console.log("Message details:", {
+        channel: message.channel,
+        user: message.user,
+        ts: message.ts,
+        type: message.type,
+      });
     });
 
     // Keep-alive mechanism
