@@ -11,12 +11,44 @@ const ai = new GoogleGenAI({
 });
 
 // Rate limiting configuration
-const RATE_LIMIT_DELAY = 1000; // 1 second between requests
+const RATE_LIMIT_DELAY = 5000; // 5 seconds between requests
 let lastRequestTime = 0;
 
-// Create Express app
+// Create Express app for testing
+const testApp = express();
+testApp.use(express.json());
+
+// Test endpoint for Gemini
+testApp.post("/test-gemini", async (req, res) => {
+  try {
+    console.log("Received request body:", req.body);
+    const { message } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: "Message is required" });
+    }
+
+    console.log("Testing Gemini API with message:", message);
+    const response = await getGeminiResponse(message);
+    console.log("Gemini API response:", response);
+
+    res.json({ response });
+  } catch (error) {
+    console.error("Error in test-gemini endpoint:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Start the test server
+const TEST_PORT = 3001;
+testApp.listen(TEST_PORT, () => {
+  console.log(`Test server running on port ${TEST_PORT}`);
+});
+
+// Create Express app for Slack
 const expressApp = express();
 expressApp.use(express.json());
+expressApp.use(express.urlencoded({ extended: true }));
 
 // Initialize your Slack app
 const app = new App({
@@ -31,6 +63,47 @@ const app = new App({
       handler: (req, res) => {
         res.writeHead(200);
         res.end("Slack Deploy Advisor Bot is running!");
+      },
+    },
+    {
+      path: "/test-gemini",
+      method: ["POST"],
+      handler: async (req, res) => {
+        try {
+          let body = "";
+          req.on("data", (chunk) => {
+            body += chunk.toString();
+          });
+
+          req.on("end", async () => {
+            try {
+              console.log("Raw request body:", body); // Debug log
+              const data = JSON.parse(body);
+              const { message } = data;
+
+              if (!message) {
+                res.writeHead(400);
+                res.end(JSON.stringify({ error: "Message is required" }));
+                return;
+              }
+
+              console.log("Testing Gemini API with message:", message);
+              const response = await getGeminiResponse(message);
+              console.log("Gemini API response:", response);
+
+              res.writeHead(200, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ response }));
+            } catch (parseError) {
+              console.error("Error parsing request body:", parseError);
+              res.writeHead(400);
+              res.end(JSON.stringify({ error: "Invalid JSON body" }));
+            }
+          });
+        } catch (error) {
+          console.error("Error in test-gemini endpoint:", error);
+          res.writeHead(500);
+          res.end(JSON.stringify({ error: error.message }));
+        }
       },
     },
     {
@@ -227,32 +300,40 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // Function to get Gemini's response with retry logic
 async function getGeminiResponse(message, retryCount = 0) {
   try {
-    // Rate limiting
+    // Rate limiting with exponential backoff
     const now = Date.now();
     const timeSinceLastRequest = now - lastRequestTime;
-    if (timeSinceLastRequest < RATE_LIMIT_DELAY) {
-      await delay(RATE_LIMIT_DELAY - timeSinceLastRequest);
+    const backoffDelay = Math.min(1000 * Math.pow(2, retryCount), 30000); // Max 30 seconds
+    const waitTime = Math.max(
+      RATE_LIMIT_DELAY - timeSinceLastRequest,
+      backoffDelay
+    );
+
+    if (waitTime > 0) {
+      console.log(`Waiting ${waitTime}ms before making request...`);
+      await delay(waitTime);
     }
     lastRequestTime = Date.now();
 
     const config = {
       responseMimeType: "text/plain",
     };
-    const model = "gemini-2.5-pro-preview-05-06";
+    const model = "gemini-2.0-flash";
     const contents = [
       {
         role: "user",
         parts: [
           {
-            text: `You are a helpful DevOps assistant. The user asked: "${message}". 
-            If they're asking about deployment, focus on deployment best practices and risks. 
-            If it's a general question, provide a helpful response. 
-            Keep your response concise and friendly, and include relevant emojis.`,
+            text: `You are a sassy DevOps assistant who LOVES to roast Friday deployments. 
+            The user asked: "${message}". 
+            Respond in ONE line only, be direct and sassy, include 1-2 relevant emojis. 
+            For Friday deployments, roast them hard! For other topics, be sassy but helpful.`,
           },
         ],
       },
     ];
 
+    console.log("Making request to Gemini API...");
     const response = await ai.models.generateContentStream({
       model,
       config,
@@ -267,12 +348,11 @@ async function getGeminiResponse(message, retryCount = 0) {
   } catch (error) {
     console.error("Error getting Gemini response:", error);
 
-    // Retry logic for rate limiting
+    // Retry logic for rate limiting with exponential backoff
     if (error.message.includes("429") && retryCount < 3) {
-      console.log(
-        `Rate limited, retrying in ${(retryCount + 1) * 2} seconds...`
-      );
-      await delay((retryCount + 1) * 2000); // Exponential backoff
+      const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 30000); // Max 30 seconds
+      console.log(`Rate limited, retrying in ${retryDelay / 1000} seconds...`);
+      await delay(retryDelay);
       return getGeminiResponse(message, retryCount + 1);
     }
 
