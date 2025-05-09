@@ -454,8 +454,45 @@ app.message(
           return;
         }
 
-        // Use Gemini for other questions
-        console.log("Calling Gemini API for message:", message.text);
+        // Check if this is a thread reply
+        if (message.thread_ts) {
+          // Get the parent message to check if it was a Friday deployment question
+          try {
+            const result = await app.client.conversations.history({
+              channel: message.channel,
+              latest: message.thread_ts,
+              limit: 1,
+              inclusive: true,
+            });
+
+            const parentMessage = result.messages[0];
+            const isFridayDeploymentThread =
+              parentMessage &&
+              parentMessage.text.match(
+                /(?:should|can|could)\s+(?:i|we|you)\s+(?:deploy|release|push|ship)\s+(?:on|this\s+friday)(?:\?)?/i
+              );
+
+            if (!isFridayDeploymentThread) {
+              console.log(
+                "Not a Friday deployment thread - skipping Gemini response"
+              );
+              return;
+            }
+          } catch (error) {
+            console.error("Error checking thread context:", error);
+            return;
+          }
+        } else {
+          // Not a thread reply, skip Gemini response
+          console.log("Not a thread reply - skipping Gemini response");
+          return;
+        }
+
+        // Use Gemini for questions in Friday deployment threads
+        console.log(
+          "Calling Gemini API for message in Friday deployment thread:",
+          message.text
+        );
         const geminiResponse = await getGeminiResponse(message.text);
         console.log("Received Gemini response:", geminiResponse);
         await say({
