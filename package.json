@@ -1,14 +1,18 @@
 {
-    "name": "slack-deploy-bot",
-    "version": "1.0.0",
-    "description": "A Slack bot that answers whether you should deploy today",
-    "main": "index.js",
-    "scripts": {
-      "start": "node index.js"
-    },
-    "dependencies": {
-      "@slack/bolt": "^3.13.0",
-      "axios": "^1.4.0",
-      "dotenv": "^16.0.3"
-    }
+  "name": "slack-deploy-bot",
+  "version": "1.0.0",
+  "description": "A Slack bot that answers whether you should deploy today",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "build": "yarn --frozen-lockfile install"
+  },
+  "dependencies": {
+    "@slack/bolt": "^3.13.0",
+    "axios": "^1.4.0",
+    "dotenv": "^16.0.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
+}
