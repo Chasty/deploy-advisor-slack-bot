@@ -444,33 +444,24 @@ app.message(
       });
 
       try {
-        // Check if it's a deployment-related question
-        if (message.text.toLowerCase().includes("deploy")) {
-          // Use existing deployment logic
-          const timezone = "UTC"; // You can get this from user settings if needed
-          if (isFriday(timezone)) {
-            const responseMessage = getRandomMessage(fridayMessages);
-            await say({
-              text: addRandomEmojis(responseMessage, true),
-              thread_ts: message.ts,
-            });
-          } else {
-            const responseMessage = getRandomMessage(otherDayMessages);
-            await say({
-              text: addRandomEmojis(responseMessage, false),
-              thread_ts: message.ts,
-            });
-          }
-        } else {
-          // Use Gemini for other questions
-          console.log("Calling Gemini API for message:", message.text);
-          const geminiResponse = await getGeminiResponse(message.text);
-          console.log("Received Gemini response:", geminiResponse);
-          await say({
-            text: geminiResponse,
-            thread_ts: message.ts,
-          });
+        // Skip if it's a deployment-related question (handled by regex)
+        if (
+          message.text.match(
+            /(?:should|can|could)\s+(?:i|we|you)\s+(?:deploy|release|push|ship)\s+(?:today|now|this\s+time|on|this\s+friday)(?:\?)?/i
+          )
+        ) {
+          console.log("Skipping deployment message - handled by regex");
+          return;
         }
+
+        // Use Gemini for other questions
+        console.log("Calling Gemini API for message:", message.text);
+        const geminiResponse = await getGeminiResponse(message.text);
+        console.log("Received Gemini response:", geminiResponse);
+        await say({
+          text: geminiResponse,
+          thread_ts: message.ts,
+        });
       } catch (error) {
         console.error("Error processing message:", error);
         await say({
