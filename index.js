@@ -2,7 +2,13 @@
 const { App } = require("@slack/bolt");
 const axios = require("axios");
 const express = require("express");
+const { GoogleGenAI } = require("@google/genai");
 require("dotenv").config();
+
+// Initialize Google AI
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+});
 
 // Create Express app
 const expressApp = express();
@@ -211,6 +217,44 @@ app.message(
   }
 );
 
+// Function to get Gemini's response
+async function getGeminiResponse(message) {
+  try {
+    const config = {
+      responseMimeType: "text/plain",
+    };
+    const model = "gemini-2.5-pro-preview-05-06";
+    const contents = [
+      {
+        role: "user",
+        parts: [
+          {
+            text: `You are a helpful DevOps assistant. The user asked: "${message}". 
+            If they're asking about deployment, focus on deployment best practices and risks. 
+            If it's a general question, provide a helpful response. 
+            Keep your response concise and friendly, and include relevant emojis.`,
+          },
+        ],
+      },
+    ];
+
+    const response = await ai.models.generateContentStream({
+      model,
+      config,
+      contents,
+    });
+
+    let fullResponse = "";
+    for await (const chunk of response) {
+      fullResponse += chunk.text;
+    }
+    return fullResponse;
+  } catch (error) {
+    console.error("Error getting Gemini response:", error);
+    return "I'm having trouble thinking right now. Maybe try asking again? 🤔";
+  }
+}
+
 // Handle variations of deployment/release questions
 app.message(
   /(?:should|can|could)\s+(?:i|we|you)\s+(?:deploy|release|push|ship)\s+(?:today|now|this\s+time)(?:\?)?/i,
@@ -275,9 +319,9 @@ app.message(
     // Start the Slack app
     await app.start();
     console.log("⚡️ Slack bot is running!");
-    console.log('Listening for "should I deploy today" messages...');
+    console.log("Listening for messages...");
 
-    // Add a general message listener to debug all incoming messages
+    // Add a general message listener
     app.message(async ({ message, say }) => {
       console.log("Received message:", message.text);
       console.log("Message details:", {
@@ -286,6 +330,40 @@ app.message(
         ts: message.ts,
         type: message.type,
       });
+
+      try {
+        // Check if it's a deployment-related question
+        if (message.text.toLowerCase().includes("deploy")) {
+          // Use existing deployment logic
+          const timezone = "UTC"; // You can get this from user settings if needed
+          if (isFriday(timezone)) {
+            const responseMessage = getRandomMessage(fridayMessages);
+            await say({
+              text: addRandomEmojis(responseMessage, true),
+              thread_ts: message.ts,
+            });
+          } else {
+            const responseMessage = getRandomMessage(otherDayMessages);
+            await say({
+              text: addRandomEmojis(responseMessage, false),
+              thread_ts: message.ts,
+            });
+          }
+        } else {
+          // Use Gemini for other questions
+          const geminiResponse = await getGeminiResponse(message.text);
+          await say({
+            text: geminiResponse,
+            thread_ts: message.ts,
+          });
+        }
+      } catch (error) {
+        console.error("Error processing message:", error);
+        await say({
+          text: "Oops! Something went wrong. Please try again later. 🤖",
+          thread_ts: message.ts,
+        });
+      }
     });
 
     // Keep-alive mechanism
