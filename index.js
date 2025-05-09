@@ -241,6 +241,24 @@ app.message(
       // Don't respond here, just log
     });
 
+    // Keep-alive mechanism
+    const keepAlive = async () => {
+      try {
+        const response = await axios.get(`http://localhost:${port}/health`);
+        console.log(
+          "Keep-alive ping sent:",
+          response.status === 200 ? "OK" : "Failed"
+        );
+      } catch (error) {
+        console.error("Keep-alive ping failed:", error.message);
+      }
+    };
+
+    // Send keep-alive ping every 14 minutes
+    setInterval(keepAlive, 14 * 60 * 1000);
+    // Send initial ping
+    keepAlive();
+
     // Handle process termination
     process.on("SIGTERM", async () => {
       console.log("SIGTERM received. Shutting down gracefully...");
