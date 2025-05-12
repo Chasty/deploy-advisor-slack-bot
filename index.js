@@ -507,10 +507,10 @@ app.message(
         });
       } catch (error) {
         console.error("Error processing message:", error);
-        await say({
-          text: "Oops! Something went wrong. Please try again later. 🤖",
-          thread_ts: message.ts,
-        });
+        // await say({
+        //   text: "Oops! Something went wrong. Please try again later. 🤖",
+        //   thread_ts: message.ts,
+        // });
       }
     });
 
